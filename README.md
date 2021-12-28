@@ -1,5 +1,11 @@
 # websocket
 
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/xenking/websocket)](https://pkg.go.dev/github.com/xenking/websocket)
+[![Go Report Card](https://goreportcard.com/badge/github.com/xenking/websocket)](https://goreportcard.com/report/github.com/xenking/websocket)
+[![Build Status](https://travis-ci.com/xenking/websocket.svg?branch=master)](https://travis-ci.com/xenking/websocket)
+[![codecov](https://codecov.io/gh/xenking/websocket/branch/master/graph/badge.svg)](https://codecov.io/gh/xenking/websocket)
+
+
 WebSocket library for [fasthttp](https://github.com/valyala/fasthttp) and [net/http](https://pkg.go.dev/net/http).
 
 Checkout [examples](https://github.com/xenking/websocket/blob/master/examples) to inspire yourself.
