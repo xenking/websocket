@@ -3,10 +3,11 @@ package websocket
 import (
 	"crypto/sha1"
 	b64 "encoding/base64"
-	"github.com/valyala/fasthttp"
 	"hash"
 	"net/http"
 	"sync"
+
+	"github.com/valyala/fasthttp"
 )
 
 type (

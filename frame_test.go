@@ -104,7 +104,7 @@ func BenchmarkRead(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		var err error
-		var r = bytes.NewBuffer(littlePacket)
+		r := bytes.NewBuffer(littlePacket)
 		reader := bufio.NewReader(r)
 
 		fr := AcquireFrame()

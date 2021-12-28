@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
+	nyws "github.com/fasthttp/websocket"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/gorilla/websocket"
 	"github.com/valyala/fasthttp"
-	nyws "nhooyr.io/websocket"
 )
 
 type fakeServerConn struct {

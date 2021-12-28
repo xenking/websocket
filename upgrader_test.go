@@ -11,7 +11,7 @@ var (
 )
 
 func TestBase64Encoding(t *testing.T) {
-	var b = make([]byte, len(decodedString))
+	b := make([]byte, len(decodedString))
 	copy(b, decodedString)
 	b = appendEncode(base64, b[:0], b)
 	if !bytes.Equal(b, encodedString) {
@@ -20,7 +20,7 @@ func TestBase64Encoding(t *testing.T) {
 }
 
 func TestBase64Decoding(t *testing.T) {
-	var b = make([]byte, len(encodedString))
+	b := make([]byte, len(encodedString))
 	var err error
 	copy(b, encodedString)
 	b, err = appendDecode(base64, b[:0], b)

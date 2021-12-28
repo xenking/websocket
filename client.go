@@ -12,10 +12,8 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-var (
-	// ErrCannotUpgrade shows up when an error occurred when upgrading a connection.
-	ErrCannotUpgrade = errors.New("cannot upgrade connection")
-)
+// ErrCannotUpgrade shows up when an error occurred when upgrading a connection.
+var ErrCannotUpgrade = errors.New("cannot upgrade connection")
 
 // MakeClient returns Conn using an existing connection.
 //
@@ -45,6 +43,9 @@ func UpgradeAsClient(c net.Conn, url string, r *fasthttp.Request) error {
 	defer fasthttp.ReleaseURI(uri)
 
 	uri.Update(url)
+	if contains := bytes.IndexByte(uri.PathOriginal(), '!'); contains > 0 {
+		uri.DisablePathNormalizing = true
+	}
 
 	origin := bytePool.Get().([]byte)
 	key := bytePool.Get().([]byte)
@@ -66,6 +67,7 @@ func UpgradeAsClient(c net.Conn, url string, r *fasthttp.Request) error {
 	req.Header.AddBytesKV(wsHeaderKey, key)
 	// TODO: Add compression
 
+	req.Header.SetHostBytes(uri.Host())
 	req.SetRequestURIBytes(uri.FullURI())
 
 	br := bufio.NewReader(c)
@@ -131,6 +133,10 @@ func dial(url string, cnf *tls.Config, req *fasthttp.Request) (conn *Client, err
 	defer fasthttp.ReleaseURI(uri)
 
 	uri.Update(url)
+
+	if contains := bytes.IndexByte(uri.PathOriginal(), '!'); contains > 0 {
+		uri.DisablePathNormalizing = true
+	}
 
 	scheme := "https"
 	port := ":443"
