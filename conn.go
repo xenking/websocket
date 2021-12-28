@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/valyala/bytebufferpool"
+	"github.com/xenking/bytebufferpool"
 )
 
 // Conn represents a WebSocket connection on the server side.
@@ -57,6 +57,7 @@ func (c *Conn) UserValue(key string) interface{} {
 
 // SetUserValue assigns a key to the given value
 func (c *Conn) SetUserValue(key string, value interface{}) {
+	//nolint:staticcheck
 	c.ctx = context.WithValue(c.ctx, key, value)
 }
 
@@ -105,9 +106,6 @@ func (c *Conn) readLoop() {
 	for {
 		fr := AcquireFrame()
 		fr.SetPayloadSize(c.MaxPayloadSize)
-
-		// if c.ReadTimeout != 0 {
-		// }
 
 		_, err := fr.ReadFrom(c.br)
 		if err != nil {
@@ -244,8 +242,6 @@ func (c *Conn) CloseDetail(status StatusCode, reason string) {
 
 		close(c.closer)
 	}
-
-	return
 }
 
 func (c *Conn) isClosed() bool {

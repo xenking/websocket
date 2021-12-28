@@ -3,6 +3,7 @@ package websocket
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -10,8 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/valyala/bytebufferpool"
 	"github.com/valyala/fasthttp"
+	"github.com/xenking/bytebufferpool"
 )
 
 type (
@@ -104,7 +105,7 @@ func (s *Server) HandlePong(pongHandler PongHandler) {
 	s.pongHandler = pongHandler
 }
 
-// HandleError ...
+// HandleError sets a callback for handling errors
 func (s *Server) HandleError(errHandler ErrorHandler) {
 	s.errHandler = errHandler
 }
@@ -137,10 +138,11 @@ func (s *Server) Upgrade(ctx *fasthttp.RequestCtx) {
 
 		if !equalsFold(b, origin) {
 			ctx.SetStatusCode(fasthttp.StatusForbidden)
+			//nolint:staticcheck
 			bytePool.Put(b)
 			return
 		}
-
+		//nolint:staticcheck
 		bytePool.Put(b)
 	}
 
@@ -149,79 +151,83 @@ func (s *Server) Upgrade(ctx *fasthttp.RequestCtx) {
 	ctx.Response.Header.DisableNormalizing()
 
 	// Connection.Value == Upgrade
-	if ctx.Request.Header.ConnectionUpgrade() {
-		// Peek sade header field.
-		hup := ctx.Request.Header.PeekBytes(upgradeString)
-		// Compare with websocket string defined by the RFC
-		if equalsFold(hup, websocketString) {
-			// Checking websocket version
-			hversion := ctx.Request.Header.PeekBytes(wsHeaderVersion)
+	if !ctx.Request.Header.ConnectionUpgrade() {
+		return
+	}
 
-			// Peeking websocket key.
-			hkey := ctx.Request.Header.PeekBytes(wsHeaderKey)
-			hprotos := bytes.Split( // TODO: Reduce allocations. Do not split. Use IndexByte
-				ctx.Request.Header.PeekBytes(wsHeaderProtocol), commaString,
-			)
+	// Peek sade header field.
+	hup := ctx.Request.Header.PeekBytes(upgradeString)
+	// Compare with websocket string defined by the RFC
+	if !equalsFold(hup, websocketString) {
+		return
+	}
+	// Checking websocket version
+	hversion := ctx.Request.Header.PeekBytes(wsHeaderVersion)
 
-			supported := false
-			// Checking versions
-			for i := range supportedVersions {
-				if bytes.Contains(supportedVersions[i], hversion) {
-					supported = true
-					break
-				}
-			}
+	// Peeking websocket key.
+	hkey := ctx.Request.Header.PeekBytes(wsHeaderKey)
+	hprotos := bytes.Split( // TODO: Reduce allocations. Do not split. Use IndexByte
+		ctx.Request.Header.PeekBytes(wsHeaderProtocol), commaString,
+	)
 
-			if !supported {
-				ctx.Error("Versions not supported", fasthttp.StatusBadRequest)
-				return
-			}
-
-			if s.UpgradeHandler != nil {
-				if !s.UpgradeHandler(ctx) {
-					return
-				}
-			}
-			// TODO: compression
-			// compress := mustCompress(exts)
-
-			// Setting response headers
-			ctx.Response.SetStatusCode(fasthttp.StatusSwitchingProtocols)
-			ctx.Response.Header.AddBytesKV(connectionString, upgradeString)
-			ctx.Response.Header.AddBytesKV(upgradeString, websocketString)
-			ctx.Response.Header.AddBytesKV(wsHeaderAccept, makeKey(hkey, hkey))
-
-			// TODO: implement bad websocket version
-			// https://tools.ietf.org/html/rfc6455#section-4.4
-			if proto := selectProtocol(hprotos, s.Protocols); proto != "" {
-				ctx.Response.Header.AddBytesK(wsHeaderProtocol, proto)
-			}
-
-			nctx := context.Background()
-			ctx.VisitUserValues(func(k []byte, v interface{}) {
-				nctx = context.WithValue(nctx, string(k), v)
-			})
-
-			ctx.Hijack(func(c net.Conn) {
-				if nc, ok := c.(interface {
-					UnsafeConn() net.Conn
-				}); ok {
-					c = nc.UnsafeConn()
-				}
-
-				conn := acquireConn(c)
-				conn.id = atomic.AddUint64(&s.nextID, 1)
-				// establishing default options
-				conn.ctx = nctx
-
-				if s.openHandler != nil {
-					s.openHandler(conn)
-				}
-
-				s.serveConn(conn)
-			})
+	supported := false
+	// Checking versions
+	for i := range supportedVersions {
+		if bytes.Contains(supportedVersions[i], hversion) {
+			supported = true
+			break
 		}
 	}
+
+	if !supported {
+		ctx.Error("Versions not supported", fasthttp.StatusBadRequest)
+		return
+	}
+
+	if s.UpgradeHandler != nil {
+		if !s.UpgradeHandler(ctx) {
+			return
+		}
+	}
+	// TODO: compression
+	// compress := mustCompress(exts)
+
+	// Setting response headers
+	ctx.Response.SetStatusCode(fasthttp.StatusSwitchingProtocols)
+	ctx.Response.Header.AddBytesKV(connectionString, upgradeString)
+	ctx.Response.Header.AddBytesKV(upgradeString, websocketString)
+	ctx.Response.Header.AddBytesKV(wsHeaderAccept, makeKey(hkey, hkey))
+
+	// TODO: implement bad websocket version
+	// https://tools.ietf.org/html/rfc6455#section-4.4
+	if proto := selectProtocol(hprotos, s.Protocols); proto != "" {
+		ctx.Response.Header.AddBytesK(wsHeaderProtocol, proto)
+	}
+
+	nctx := context.Background()
+	ctx.VisitUserValues(func(k []byte, v interface{}) {
+		//nolint:staticcheck
+		nctx = context.WithValue(nctx, string(k), v)
+	})
+
+	ctx.Hijack(func(c net.Conn) {
+		if nc, ok := c.(interface {
+			UnsafeConn() net.Conn
+		}); ok {
+			c = nc.UnsafeConn()
+		}
+
+		conn := acquireConn(c)
+		conn.id = atomic.AddUint64(&s.nextID, 1)
+		// establishing default options
+		conn.ctx = nctx
+
+		if s.openHandler != nil {
+			s.openHandler(conn)
+		}
+
+		s.serveConn(conn)
+	})
 }
 
 // NetUpgrade upgrades the websocket connection for net/http.
@@ -248,10 +254,11 @@ func (s *Server) NetUpgrade(resp http.ResponseWriter, req *http.Request) {
 
 		if !equalsFold(b, s2b(origin)) {
 			resp.WriteHeader(http.StatusForbidden)
+			//nolint:staticcheck
 			bytePool.Put(b)
 			return
 		}
-
+		//nolint:staticcheck
 		bytePool.Put(b)
 	}
 
@@ -259,91 +266,93 @@ func (s *Server) NetUpgrade(resp http.ResponseWriter, req *http.Request) {
 	// (This is not a fasthttp bug).
 	rs.Header.DisableNormalizing()
 
-	hasUpgrade := func() bool {
-		for _, v := range req.Header["Connection"] {
-			if strings.Contains(v, "Upgrade") {
-				return true
-			}
-		}
-		return false
-	}()
+	hasUpgrade := false
+	for _, v := range req.Header["Connection"] {
+		if strings.Contains(v, "Upgrade") {
+			hasUpgrade = true
 
-	// Connection.Value == Upgrade
-	if hasUpgrade {
-		// Peek sade header field.
-		hup := req.Header.Get("Upgrade")
-		// Compare with websocket string defined by the RFC
-		if equalsFold(s2b(hup), websocketString) {
-			// Checking websocket version
-			hversion := req.Header.Get(b2s(wsHeaderVersion))
-			// Peeking websocket key.
-			hkey := req.Header.Get(b2s(wsHeaderKey))
-			hprotos := bytes.Split( // TODO: Reduce allocations. Do not split. Use IndexByte
-				s2b(req.Header.Get(b2s(wsHeaderProtocol))), commaString,
-			)
-			supported := false
-			// Checking versions
-			for i := range supportedVersions {
-				if bytes.Contains(supportedVersions[i], s2b(hversion)) {
-					supported = true
-					break
-				}
-			}
-			if !supported {
-				resp.WriteHeader(http.StatusBadRequest)
-				io.WriteString(resp, "Versions not supported")
-				return
-			}
-
-			if s.UpgradeNetHandler != nil {
-				if !s.UpgradeNetHandler(resp, req) {
-					return
-				}
-			}
-			// TODO: compression
-
-			h, ok := resp.(http.Hijacker)
-			if !ok {
-				resp.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-
-			c, _, err := h.Hijack()
-			if err != nil {
-				io.WriteString(resp, err.Error())
-				return
-			}
-
-			// Setting response headers
-			rs.SetStatusCode(fasthttp.StatusSwitchingProtocols)
-			rs.Header.AddBytesKV(connectionString, upgradeString)
-			rs.Header.AddBytesKV(upgradeString, websocketString)
-			rs.Header.AddBytesKV(wsHeaderAccept, makeKey(s2b(hkey), s2b(hkey)))
-			// TODO: implement bad websocket version
-			// https://tools.ietf.org/html/rfc6455#section-4.4
-			if proto := selectProtocol(hprotos, s.Protocols); proto != "" {
-				rs.Header.AddBytesK(wsHeaderProtocol, proto)
-			}
-
-			_, err = rs.WriteTo(c)
-			if err != nil {
-				c.Close()
-				return
-			}
-
-			go func(ctx context.Context) {
-				conn := acquireConn(c)
-				conn.id = atomic.AddUint64(&s.nextID, 1)
-				conn.ctx = ctx
-
-				if s.openHandler != nil {
-					s.openHandler(conn)
-				}
-
-				s.serveConn(conn)
-			}(req.Context())
+			break
 		}
 	}
+
+	// Connection.Value == Upgrade
+	if !hasUpgrade {
+		return
+	}
+	// Peek sade header field.
+	hup := req.Header.Get("Upgrade")
+	// Compare with websocket string defined by the RFC
+	if !equalsFold(s2b(hup), websocketString) {
+		return
+	}
+	// Checking websocket version
+	hversion := req.Header.Get(b2s(wsHeaderVersion))
+	// Peeking websocket key.
+	hkey := req.Header.Get(b2s(wsHeaderKey))
+	hprotos := bytes.Split( // TODO: Reduce allocations. Do not split. Use IndexByte
+		s2b(req.Header.Get(b2s(wsHeaderProtocol))), commaString,
+	)
+	supported := false
+	// Checking versions
+	for i := range supportedVersions {
+		if bytes.Contains(supportedVersions[i], s2b(hversion)) {
+			supported = true
+			break
+		}
+	}
+	if !supported {
+		resp.WriteHeader(http.StatusBadRequest)
+		io.WriteString(resp, "Versions not supported")
+		return
+	}
+
+	if s.UpgradeNetHandler != nil {
+		if !s.UpgradeNetHandler(resp, req) {
+			return
+		}
+	}
+	// TODO: compression
+
+	h, ok := resp.(http.Hijacker)
+	if !ok {
+		resp.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	c, _, err := h.Hijack()
+	if err != nil {
+		io.WriteString(resp, err.Error())
+		return
+	}
+
+	// Setting response headers
+	rs.SetStatusCode(fasthttp.StatusSwitchingProtocols)
+	rs.Header.AddBytesKV(connectionString, upgradeString)
+	rs.Header.AddBytesKV(upgradeString, websocketString)
+	rs.Header.AddBytesKV(wsHeaderAccept, makeKey(s2b(hkey), s2b(hkey)))
+	// TODO: implement bad websocket version
+	// https://tools.ietf.org/html/rfc6455#section-4.4
+	if proto := selectProtocol(hprotos, s.Protocols); proto != "" {
+		rs.Header.AddBytesK(wsHeaderProtocol, proto)
+	}
+
+	_, err = rs.WriteTo(c)
+	if err != nil {
+		c.Close()
+		return
+	}
+
+	go func(ctx context.Context) {
+		conn := acquireConn(c)
+		conn.id = atomic.AddUint64(&s.nextID, 1)
+		conn.ctx = ctx
+
+		if s.openHandler != nil {
+			s.openHandler(conn)
+		}
+
+		s.serveConn(conn)
+	}(req.Context())
 }
 
 func (s *Server) serveConn(c *Conn) {
@@ -358,14 +367,14 @@ loop:
 			if err == nil {
 				break loop
 			}
-
-			if ce, ok := err.(closeError); ok {
+			ce := closeError{}
+			if errors.As(err, &ce) {
 				closeErr = ce.err
 				break loop
 			}
-
-			if ce, ok := err.(Error); ok {
-				closeErr = ce
+			e := Error{}
+			if errors.As(err, &e) {
+				closeErr = e
 				break loop
 			}
 

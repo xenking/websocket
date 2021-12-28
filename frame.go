@@ -447,25 +447,25 @@ func (fr *Frame) WriteTo(wr io.Writer) (n int64, err error) {
 	// +2 because we must include the
 	// first two bytes (stuff + opcode + mask + payload len)
 	ni, err = wr.Write(fr.op[:s+2])
-	if err == nil {
+	if err != nil {
+		return n, err
+	}
+	n += int64(ni)
+
+	if fr.IsMasked() {
+		ni, err = wr.Write(fr.mask)
+		if err != nil {
+			return n, err
+		}
 		n += int64(ni)
-
-		if fr.IsMasked() {
-			ni, err = wr.Write(fr.mask)
-			if ni > 0 {
-				n += int64(ni)
-			}
-		}
-
-		if err == nil && len(fr.b) != 0 {
-			ni, err = wr.Write(fr.b)
-			if ni > 0 {
-				n += int64(ni)
-			}
-		}
 	}
 
-	return
+	if len(fr.b) != 0 {
+		ni, err = wr.Write(fr.b)
+		n += int64(ni)
+	}
+
+	return n, err
 }
 
 // Status returns StatusCode.
@@ -539,48 +539,59 @@ func (fr *Frame) readFrom(r io.Reader) (int64, error) {
 
 	// read the first 2 bytes (stuff + opcode + maskbit + payload len)
 	n, err = io.ReadFull(r, fr.op[:2])
-	if err == io.ErrUnexpectedEOF {
-		err = errReadingHeader
+	if err != nil {
+		if errors.Is(err, io.ErrUnexpectedEOF) {
+			err = errReadingHeader
+		}
+
+		return int64(n), err
 	}
 
-	if err == nil {
-		// get how many bytes we should read to read the length
-		m = fr.mustRead() + 2
+	// get how many bytes we should read to read the length
+	m = fr.mustRead() + 2
 
-		if m > 2 { // reading length
-			n, err = io.ReadFull(r, fr.op[2:m]) // start from 2 to fill in 2:m
-			if err == io.ErrUnexpectedEOF {
-				err = errReadingLen
+	if m > 2 { // reading length
+		n, err = io.ReadFull(r, fr.op[2:m]) // start from 2 to fill in 2:m
+		if err != nil {
+			if errors.Is(err, io.ErrUnexpectedEOF) {
+				err = errReadingHeader
 			}
+
+			return int64(n), err
+		}
+	}
+
+	if fr.IsMasked() { // reading mask
+		n, err = io.ReadFull(r, fr.mask[:4])
+		if err != nil {
+			if errors.Is(err, io.ErrUnexpectedEOF) {
+				err = errReadingHeader
+			}
+
+			return int64(n), err
+		}
+	}
+
+	// reading the payload
+	frameSize := fr.Len()
+	if (fr.max > 0 && frameSize > fr.max) || frameSize > limitLen {
+		return int64(n), errLenTooBig
+	}
+	if frameSize == 0 { // read the payload
+		return int64(n), err
+	}
+	nn := int64(frameSize)
+	if nn < 0 {
+		panic("uint64 to int64 conversion gave a negative number")
+	}
+
+	if nn > 0 {
+		if rLen := nn - int64(cap(fr.b)); rLen > 0 {
+			fr.b = append(fr.b[:cap(fr.b)], make([]byte, rLen)...)
 		}
 
-		if err == nil && fr.IsMasked() { // reading mask
-			n, err = io.ReadFull(r, fr.mask[:4])
-			if err == io.ErrUnexpectedEOF {
-				err = errReadingMask
-			}
-		}
-
-		if err == nil {
-			// reading the payload
-			if frameSize := fr.Len(); (fr.max > 0 && frameSize > fr.max) || frameSize > limitLen {
-				err = errLenTooBig
-			} else if frameSize > 0 { // read the payload
-				nn := int64(frameSize)
-				if nn < 0 {
-					panic("uint64 to int64 conversion gave a negative number")
-				}
-
-				if nn > 0 {
-					if rLen := nn - int64(cap(fr.b)); rLen > 0 {
-						fr.b = append(fr.b[:cap(fr.b)], make([]byte, rLen)...)
-					}
-
-					fr.b = fr.b[:nn]
-					n, err = io.ReadFull(r, fr.b)
-				}
-			}
-		}
+		fr.b = fr.b[:nn]
+		n, err = io.ReadFull(r, fr.b)
 	}
 
 	return int64(n), err

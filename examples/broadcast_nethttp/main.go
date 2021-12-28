@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dgrr/websocket"
+	"github.com/xenking/websocket"
 )
 
 type Broadcaster struct {
-	cs  sync.Map
+	cs sync.Map
 }
 
 func (b *Broadcaster) OnOpen(c *websocket.Conn) {
@@ -43,7 +43,7 @@ func (b *Broadcaster) sendData(i int) func() {
 			return true
 		})
 
-		b.Start(i+1)
+		b.Start(i + 1)
 	}
 }
 

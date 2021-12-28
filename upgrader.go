@@ -1,6 +1,8 @@
 package websocket
 
 import (
+
+	// #nosec G505
 	"crypto/sha1"
 	b64 "encoding/base64"
 	"hash"
@@ -29,6 +31,7 @@ func prepareOrigin(b []byte, uri *fasthttp.URI) []byte {
 
 var shaPool = sync.Pool{
 	New: func() interface{} {
+		// #nosec G401
 		return sha1.New()
 	},
 }

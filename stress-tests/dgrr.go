@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/dgrr/websocket"
+
 	"github.com/valyala/fasthttp"
+
+	"github.com/xenking/websocket"
 )
 
 func OnMessage(c *websocket.Conn, isBinary bool, data []byte) {

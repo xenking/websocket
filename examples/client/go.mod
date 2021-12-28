@@ -3,6 +3,6 @@ module client
 go 1.6
 
 require (
-	github.com/dgrr/websocket v0.0.7
-	github.com/valyala/fasthttp v1.28.0
+	github.com/valyala/fasthttp v1.31.0
+	github.com/xenking/websocket v0.1.2
 )

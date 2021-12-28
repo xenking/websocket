@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/dgrr/websocket"
-
 	"github.com/valyala/fasthttp"
+
+	"github.com/xenking/websocket"
 )
 
 func main() {

@@ -49,7 +49,9 @@ func UpgradeAsClient(c net.Conn, url string, r *fasthttp.Request) error {
 
 	origin := bytePool.Get().([]byte)
 	key := bytePool.Get().([]byte)
+	//nolint:staticcheck
 	defer bytePool.Put(origin)
+	//nolint:staticcheck
 	defer bytePool.Put(key)
 
 	origin = prepareOrigin(origin, uri)
@@ -105,7 +107,7 @@ func client(c net.Conn, url string, r *fasthttp.Request) (cl *Client, err error)
 func Dial(url string) (*Client, error) {
 	cnf := &tls.Config{
 		InsecureSkipVerify: false,
-		MinVersion:         tls.VersionTLS11,
+		MinVersion:         tls.VersionTLS12,
 		MaxVersion:         tls.VersionTLS13,
 	}
 
@@ -122,7 +124,7 @@ func DialTLS(url string, cnf *tls.Config) (*Client, error) {
 func DialWithHeaders(url string, req *fasthttp.Request) (*Client, error) {
 	cnf := &tls.Config{
 		InsecureSkipVerify: false,
-		MinVersion:         tls.VersionTLS11,
+		MinVersion:         tls.VersionTLS12,
 	}
 
 	return dial(url, cnf, req)
@@ -146,6 +148,7 @@ func dial(url string, cnf *tls.Config, req *fasthttp.Request) (conn *Client, err
 	uri.SetScheme(scheme)
 
 	addr := bytePool.Get().([]byte)
+	//nolint:staticcheck
 	defer bytePool.Put(addr)
 
 	addr = append(addr[:0], uri.Host()...)

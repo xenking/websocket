@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	nyws "nhooyr.io/websocket"
+	nyws "github.com/fasthttp/websocket"
 )
 
 type handler struct{}
