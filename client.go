@@ -249,8 +249,6 @@ func (c *Client) Close() error {
 	}
 
 	c.c.SetReadDeadline(time.Now().Add(time.Second * 3)) // wait 3 seconds before closing
-	// just read the next message
-	c.ReadFrame(fr)
 
 	return c.c.Close()
 }
