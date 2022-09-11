@@ -471,7 +471,6 @@ func (s *Server) handlePong(c *Conn, data []byte) {
 }
 
 func (s *Server) handleClose(c *Conn, fr *Frame) {
-	defer close(c.closer)
 	c.errch <- func() error {
 		if fr.Status() != StatusNone {
 			return Error{
@@ -492,4 +491,8 @@ func (s *Server) handleClose(c *Conn, fr *Frame) {
 
 	// reply back
 	c.WriteFrame(fr)
+
+	if atomic.CompareAndSwapInt32(&c.closed, 0, 1) {
+		close(c.closer)
+	}
 }

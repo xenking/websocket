@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/xenking/bytebufferpool"
@@ -40,9 +41,9 @@ type Conn struct {
 	// By default MaxPayloadSize is DefaultPayloadSize.
 	MaxPayloadSize uint64
 
-	wg sync.WaitGroup
-
-	ctx context.Context
+	wg     sync.WaitGroup
+	ctx    context.Context
+	closed int32
 }
 
 // ID returns a unique identifier for the connection.
@@ -230,7 +231,7 @@ func (c *Conn) Close() error {
 }
 
 func (c *Conn) CloseDetail(status StatusCode, reason string) {
-	if !c.isClosed() {
+	if atomic.CompareAndSwapInt32(&c.closed, 0, 1) {
 		fr := AcquireFrame()
 		fr.SetClose()
 		fr.SetStatus(status)
@@ -241,16 +242,5 @@ func (c *Conn) CloseDetail(status StatusCode, reason string) {
 		c.WriteFrame(fr)
 
 		close(c.closer)
-	}
-}
-
-func (c *Conn) isClosed() bool {
-	select {
-	case <-c.closer:
-		return true
-	default:
-		// if we reach this point, that means `closer` is not closed
-		// so we still have the connection alive
-		return false
 	}
 }

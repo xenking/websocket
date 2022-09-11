@@ -3,7 +3,7 @@ module github.com/xenking/websocket
 go 1.17
 
 require (
-	github.com/valyala/fasthttp v1.38.0
+	github.com/valyala/fasthttp v1.40.0
 	github.com/xenking/bytebufferpool v1.1.0
 )
 
