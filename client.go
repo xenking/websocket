@@ -252,3 +252,10 @@ func (c *Client) Close() error {
 
 	return c.c.Close()
 }
+
+// Shutdown closes the websocket connection immediately.
+func (c *Client) Shutdown() error {
+	c.c.SetDeadline(time.Unix(1, 0))
+
+	return c.c.Close()
+}
